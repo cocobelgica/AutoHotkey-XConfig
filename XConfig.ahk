@@ -2,9 +2,10 @@ class XConfig
 {
 	
 	
-	__New(src) {
-		ObjInsert(this, "_", [])
+	__New(src, file:="") {
+		ObjInsert(this, "_", []) ;Proxy object
 		ObjInsert(this, "__doc", ComObjCreate("MSXML2.DOMDocument.6.0"))
+		this.setProperty("SelectionLanguage", "XPath") ; Not really needed.
 		this.async := false
 
 		;Load XML source
@@ -13,7 +14,9 @@ class XConfig
 		else if ((f:=FileExist(src)) && !(f ~= "D"))
 			this.load(src)
 		else throw Exception("Invalid XML source.", -1)
-		
+
+		if (file <> "")
+			this.file := file
 	}
 
 	__Set(k, v, p*) {
@@ -23,12 +26,19 @@ class XConfig
 
 		try if (n:=this.__doc.selectSingleNode(k)) {
 			if ((nts:=n.nodeTypeString) = "element") {
-				if ((c:=n.childNodes).length > 1)
-					n := c.item(0)
-				prev := n.text
-				n.text := v
-
-			} else if (nts = "attribute") {
+				if (t:=n.selectSingleNode("./text()")) {
+					prev := t.nodeValue
+					, t.nodeValue := v
+				
+				} else {
+					prev := "" , t := this.createTextNode(v)
+					if n.hasChildNodes()
+						n.insertBefore(t, n.firstChild)
+					
+					else n.appendChild(t)
+				}
+			
+			} else if (nts ~= "i)^(attribute|text|comment|cdatasection)$") {
 				prev := n.nodeValue
 				n.nodeValue := v
 			
@@ -46,11 +56,11 @@ class XConfig
 			
 			try if (n:=this.__doc.selectSingleNode(k)) {
 				if ((nts:=n.nodeTypeString) = "element") {
-					if (cc:=(c:=n.childNodes).length > 1)
-						c := c.item(0)
-					return p.1 ? n[p.1] : (cc ? c.text : n.text)
+					return p.1
+					       ? n[p.1]
+					       : ((t:=n.selectSingleNode("./text()")) ? t.nodeValue : "")
 
-				} else if (nts = "attribute") {
+				} else if (nts ~= "i)^(attribute|text|comment|cdatasection)$") {
 					return n[p.1 ? p.1 : "nodeValue"]
 				
 				}
@@ -61,7 +71,9 @@ class XConfig
 		}
 
 		file() {
-			return this._.Haskey("file") ? this._.file : ""
+			return this._.Haskey("file")
+			       ? this._.file
+			       : ((url:=this.url)<>"" ? url : "")
 		}
 
 		root() {
@@ -93,18 +105,18 @@ class XConfig
 			try return (this.__doc)[m](p*)
 	}
 
-	__Add(x, n, v*) {
+	__Add(x, n, p:="") {
 		x := this.selectSingleNode(x)
 		if IsObject(n) {
 			for a, b in n
 				x.setAttribute(a, b)
 		
 		} else if (n ~= "s)^<.*>$") {
-			n := this.__Str2Node(n)
+			n := this.__XML2DOM(n)
 			, cmd := (r:=(p<>"")) ? "insertBefore" : "appendChild"
 			, args := r ? [n, x.selectSingleNode(p)] : [n]
 			
-			return x[cmd](args*)
+			return x[cmd](args*) ; Fix this in case DocumentFragment is added.
 
 		} else {
 			e := this.createElement(n)
@@ -132,12 +144,16 @@ class XConfig
 	}
 
 	__Del(x) {
-		if ((nts:=(n:=this.selectSingleNode(x)).nodeTypeString) = "element")
-			n.parentNode.removeChild(n)
 		
-		else if (nts = "attribute")
-			p := this.selectSingleNode(RegExReplace(x, "/[^/]+$", ""))
-			, p.removeAttributeNode(n)
+		if ((nts:=(n:=this.selectSingleNode(x)).nodeTypeString) = "attribute") {
+			_ := this.selectNodes("//*[@" n.name "='" n.value "']")
+			Loop, % _.length
+				e := _.item(A_Index-1)
+			until e.selectNodes("@*").matches(n)
+			e.removeAttributeNode(n)
+		
+		} else if (nts ~= "i)^(element|text|comment|cdatasection)$")
+			n.parentNode.removeChild(n)
 	}
 
 	__Save(dir:="", indent:=false) {
@@ -145,7 +161,9 @@ class XConfig
 		if indent
 			this.__Transform()
 
-		this.save(dir<>"" ? dir : A_ScriptDir)
+		this.save(dir<>""
+		         ? dir
+		         : ((f:=this.file) ? f : A_WorkingDir "\XCONFIG-" A_TickCount))
 	}
 
 	__Transform() {
@@ -171,7 +189,7 @@ class XConfig
 		}
 		this.transformNodeToObject(xsl, this.__doc)
 	}
-
+	/*
 	__Str2Node(str) {
 		static x
 
@@ -179,8 +197,66 @@ class XConfig
 			x := ComObjCreate("MSXML2.DOMDocument.6.0")
 			, x.async := false
 
-		x.loadXML("<ROOT>" str "</ROOT>")
-		return x.documentElement.childNodes.item(0)
+		x.loadXML("<XCONFIG>" str "</XCONFIG>")
+
+		if (pe:=x.parseError).errorCode {
+			RegExMatch(str, "sO)^<([^\s>]+)(?:[^>]+|)>", t)
+			, RegExMatch(str, "sO)^" t.value "(?:.*?|)(</" t.1 ">|$)$", m)
+			
+			if (m.1="") && (pe.reason~="i)(end|start|tag|not|match|XCONFIG|" t.1 ")")
+				return this.__Str2Node(m.value . "</" t.1 ">")
+			
+			else throw Exception(pe.reason, -1)
+		;} else return x.documentElement.firstChild
+		} else return this.importNode(x.documentElement.firstChild, true)
+	}
+	*/
+	__XML2DOM(str) {
+		static x
+
+		if !x
+			x := ComObjCreate("MSXML2.DOMDocument.6.0")
+			, x.async := false
+
+		x.loadXML("<XCONFIG>" str "</XCONFIG>")
+		n := this.importNode(x.documentElement, true)
+		DOMNode := (n.childNodes.length > 1)
+		        ? this.createDocumentFragment()
+		        : n.removeChild(n.firstChild)
+
+		while (n.hasChildNodes())
+			DOMNode.appendChild(n.removeChild(n.firstChild))
+		
+		return DOMNode
+	}
+	;Short-hand for selectNodes/selectSingleNode
+	__(xpr, single:=true) {
+		;Bypass __Call in this case
+		return (this.__doc)[single ? "selectSingleNode" : "selectNodes"](xpr)
+	}
+	;Returns the node type of a node represented as XML string.
+	__Type(str, string:=true) {
+		static r
+
+		if !r
+			r := {a:{0:2, 1:"attribute"}
+		        , cds:{0:4, 1:"cdatasection"}
+		        , c:{0:8, 1:"comment"}
+		        , e:{0:1, 1:"element"}}
+
+		if (str ~= "^[\w]+=(""|').*?\1$")
+			return r["a", string]
+		
+		else if (str ~= "s)^<!\[CDATA\[(?:(?!]]>).)*?]]>$")
+			return r["cds", string]
+		
+		else if (str ~= "s)^<!--.*?-->$")
+			return r["c", string]
+		
+		else if (str ~= "s)^<((?!(?:xml|[\d\W_]))[^\s>]+)(?:[^>]+|)(?:/>$|>.*</\1\s*>)$")
+			return r["e", string]
+
+		else throw Exception("No match", -1)
 	}
 
 	class __PROPERTIES__

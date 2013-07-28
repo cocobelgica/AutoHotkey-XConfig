@@ -51,7 +51,7 @@ class XConfig
 
 	class __Get extends XConfig.__PROPERTIES__
 	{
-
+		/*
 		__(k, p*) {
 			
 			try if (n:=this.__doc.selectSingleNode(k)) {
@@ -67,6 +67,25 @@ class XConfig
 			
 			}
 			
+			try return (this.__doc)[k]
+		}
+		*/
+		__(k, p*) {
+
+			try if (n:=this.__doc.selectSingleNode(k)) {
+				if p.MinIndex() {
+					for a, b in p
+						n := n[b]
+					return n
+				}
+				
+				if ((nts:=n.nodeTypeString) = "element")
+					return ((t:=n.selectSingleNode("./text()")) ? t.nodeValue : "")
+
+				else if (nts ~= "i)^(attribute|text|comment|cdatasection)$")
+					return n.nodeValue
+			}
+
 			try return (this.__doc)[k]
 		}
 
@@ -118,7 +137,7 @@ class XConfig
 			
 			return x[cmd](args*) ; Fix this in case DocumentFragment is added.
 
-		} else {
+		} else if (n ~= "i)^(?!(?:xml|[\d\W_]))[^\s\W]+$") { ; valid tagName
 			e := this.createElement(n)
 			if IsObject(p) {
 				cmd := (r:=p.HasKey("ref")) ? "insertBefore" : "appendChild"
@@ -229,12 +248,16 @@ class XConfig
 		
 		return DOMNode
 	}
-	;Short-hand for selectNodes/selectSingleNode
+	/*
+	Short-hand for selectNodes/selectSingleNode
+	*/
 	__(xpr, single:=true) {
 		;Bypass __Call in this case
 		return (this.__doc)[single ? "selectSingleNode" : "selectNodes"](xpr)
 	}
-	;Returns the node type of a node represented as XML string.
+	/*
+	Returns the node type of a node represented as XML string.
+	*/
 	__Type(str, string:=true) {
 		static r
 
@@ -244,19 +267,38 @@ class XConfig
 		        , c:{0:8, 1:"comment"}
 		        , e:{0:1, 1:"element"}}
 
-		if (str ~= "^[\w]+=(""|').*?\1$")
+		if (str ~= this.__RGX("attribute"))
 			return r["a", string]
 		
-		else if (str ~= "s)^<!\[CDATA\[(?:(?!]]>).)*?]]>$")
+		else if (str ~= this.__RGX("cdatasection"))
 			return r["cds", string]
 		
-		else if (str ~= "s)^<!--.*?-->$")
+		else if (str ~= this.__RGX("comment"))
 			return r["c", string]
 		
-		else if (str ~= "s)^<((?!(?:xml|[\d\W_]))[^\s>]+)(?:[^>]+|)(?:/>$|>.*</\1\s*>)$")
+		else if (str ~= this.__RGX("element"))
 			return r["e", string]
 
 		else throw Exception("No match", -1)
+	}
+
+	__RGX(type:="element") {
+		static xpr , k
+
+		if !xpr {
+			xpr := "
+			(LTrim
+			^[\w]+=(""|')(?:(?!\1).)*?\1$
+			s)^<!\[CDATA\[(?:(?!]]>).)*?]]>$
+			s)^<!--.*?-->$
+			s)^<((?!(?:(?i)xml|[\d\W_]))[^\s\W]+)(?:[^>]+|)(?:/>$|>.*?</\1\s*>)$
+			i)^(?!(?:xml|[\d\W_]))[^\s\W]+$
+			)"
+			k := {attribute:1,cdatasection:2,comment:3,element:4,tagName:5}
+		}
+		;RegExMatch(xpr, "(?:[^\r\n]+\R){" k[type]-1 "}\K[^\r\n]+", m)
+		RegExMatch(xpr, "(?:(?:\R|)\K[^\r\n]+){" k[type] "}", m)
+		return m
 	}
 
 	class __PROPERTIES__

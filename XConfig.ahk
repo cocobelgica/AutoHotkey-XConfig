@@ -165,9 +165,8 @@ class XConfig
 	__Del(x) {
 		
 		if ((nts:=(n:=this.selectSingleNode(x)).nodeTypeString) = "attribute") {
-			_ := this.selectNodes("//*[@" n.name "='" n.value "']")
-			Loop, % _.length
-				e := _.item(A_Index-1)
+			for e in this.selectNodes("//*[@" n.name "='" n.value "']")
+				continue
 			until e.selectNodes("@*").matches(n)
 			e.removeAttributeNode(n)
 		
@@ -281,7 +280,9 @@ class XConfig
 
 		else throw Exception("No match", -1)
 	}
-
+	/*
+	Private Method
+	*/
 	__RGX(type:="element") {
 		static xpr , k
 

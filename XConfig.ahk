@@ -266,23 +266,23 @@ class XConfig
 		        , c:{0:8, 1:"comment"}
 		        , e:{0:1, 1:"element"}}
 
-		if (str ~= this.__RGX("attribute"))
+		;attribute
+		if (str ~= "^[\w]+=(""|')(?:(?!\1).)*?\1$")
 			return r["a", string]
-		
-		else if (str ~= this.__RGX("cdatasection"))
+		;cdatasection
+		else if (str ~= "s)^<!\[CDATA\[(?:(?!]]>).)*?]]>$")
 			return r["cds", string]
-		
-		else if (str ~= this.__RGX("comment"))
+		;comment
+		else if (str ~= "s)^<!--.*?-->$")
 			return r["c", string]
-		
-		else if (str ~= this.__RGX("element"))
+		;element
+		else if (str ~= "s)^<((?!(?:(?i)xml|[\d\W_]))[^\s\W]+)(?:[^>]+|)(?:/>$|>.*?</\1\s*>)$")
 			return r["e", string]
 
 		else throw Exception("No match", -1)
 	}
 	/*
 	Private Method
-	*/
 	__RGX(type:="element") {
 		static xpr , k
 
@@ -298,10 +298,10 @@ class XConfig
 			k := {attribute:1,cdatasection:2,comment:3,element:4,tagName:5}
 		}
 		;RegExMatch(xpr, "(?:[^\r\n]+\R){" k[type]-1 "}\K[^\r\n]+", m)
-		RegExMatch(xpr, "(?:(?:\R|)\K[^\r\n]+){" k[type] "}", m)
+		RegExMatch(xpr, "(?:\R?\K[^\r\n]+){" k[type] "}", m)
 		return m
 	}
-
+	*/
 	class __PROPERTIES__
 	{
 

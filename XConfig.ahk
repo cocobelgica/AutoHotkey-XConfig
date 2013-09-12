@@ -4,8 +4,8 @@ class XConfig
 	
 	__New(src, file:="") {
 		ObjInsert(this, "_", []) ;Proxy object
-		ObjInsert(this, "__doc", ComObjCreate("MSXML2.DOMDocument.6.0"))
-		this.setProperty("SelectionLanguage", "XPath") ; Not really needed.
+		ObjInsert(this, "__doc", ComObjCreate(this.__MSXML()))
+		this.setProperty("SelectionLanguage", "XPath") ;for OS<VISTA|7|8
 		this.async := false
 
 		;Load XML source
@@ -16,12 +16,12 @@ class XConfig
 		else throw Exception("Invalid XML source.", -1)
 
 		if (file <> "")
-			this.file := file
+			this.__file := file
 	}
 
 	__Set(k, v, p*) {
 
-		if (k = "file")
+		if (k ~= "i)^__(file)$")
 			return this._[k] := v
 
 		try if (n:=this.__doc.selectSingleNode(k)) {
@@ -89,13 +89,13 @@ class XConfig
 			try return (this.__doc)[k]
 		}
 
-		file() {
-			return this._.Haskey("file")
-			       ? this._.file
+		__file() {
+			return this._.Haskey("__file")
+			       ? this._.__file
 			       : ((url:=this.url)<>"" ? url : "")
 		}
 
-		root() {
+		__root() {
 			return this.documentElement
 		}
 	}
@@ -120,7 +120,7 @@ class XConfig
 			Clone
 			))$"
 
-		if (!ObjHasKey(this.base, m) && !(m ~= BIF))
+		if (!ObjHasKey(XConfig, m) && !(m~=BIF))
 			try return (this.__doc)[m](p*)
 	}
 
@@ -165,8 +165,13 @@ class XConfig
 	__Del(x) {
 		
 		if ((nts:=(n:=this.selectSingleNode(x)).nodeTypeString) = "attribute") {
+			/*
+			;This does not work on XP and below
 			for e in this.selectNodes("//*[@" n.name "='" n.value "']")
 				continue
+			*/
+			Loop % (_:=this.selectNodes("//*[@" n.name "='" n.value "']")).length
+				e := _.item(A_Index-1)
 			until e.selectNodes("@*").matches(n)
 			e.removeAttributeNode(n)
 		
@@ -181,22 +186,22 @@ class XConfig
 
 		this.save(dir<>""
 		         ? dir
-		         : ((f:=this.file) ? f : A_WorkingDir "\XCONFIG-" A_TickCount))
+		         : ((f:=this.__file) ? f : A_WorkingDir "\XCONFIG-" A_TickCount))
 	}
 
 	__Transform() {
 		static xsl
 
 		if !xsl {
-			xsl := ComObjCreate("MSXML2.DOMDocument.6.0")
+			xsl := ComObjCreate(this.__MSXML())
 			style := "
 			(LTrim
-			<xsl:stylesheet version=""1.0"" xmlns:xsl=""http://www.w3.org/1999/XSL/Transform"">
-			<xsl:output method=""xml"" indent=""yes"" encoding=""UTF-8""/>
-			<xsl:template match=""@*|node()"">
+			<xsl:stylesheet version='1.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>
+			<xsl:output method='xml' indent='yes' encoding='UTF-8'/>
+			<xsl:template match='@*|node()'>
 			<xsl:copy>
-			<xsl:apply-templates select=""@*|node()""/>
-			<xsl:for-each select=""@*"">
+			<xsl:apply-templates select='@*|node()'/>
+			<xsl:for-each select='@*'>
 			<xsl:text></xsl:text>
 			</xsl:for-each>
 			</xsl:copy>
@@ -207,38 +212,17 @@ class XConfig
 		}
 		this.transformNodeToObject(xsl, this.__doc)
 	}
-	/*
-	__Str2Node(str) {
-		static x
-
-		if !x
-			x := ComObjCreate("MSXML2.DOMDocument.6.0")
-			, x.async := false
-
-		x.loadXML("<XCONFIG>" str "</XCONFIG>")
-
-		if (pe:=x.parseError).errorCode {
-			RegExMatch(str, "sO)^<([^\s>]+)(?:[^>]+|)>", t)
-			, RegExMatch(str, "sO)^" t.value "(?:.*?|)(</" t.1 ">|$)$", m)
-			
-			if (m.1="") && (pe.reason~="i)(end|start|tag|not|match|XCONFIG|" t.1 ")")
-				return this.__Str2Node(m.value . "</" t.1 ">")
-			
-			else throw Exception(pe.reason, -1)
-		;} else return x.documentElement.firstChild
-		} else return this.importNode(x.documentElement.firstChild, true)
-	}
-	*/
+	
 	__XML2DOM(str) {
 		static x
 
 		if !x
-			x := ComObjCreate("MSXML2.DOMDocument.6.0")
+			x := ComObjCreate(this.__MSXML())
 			, x.async := false
 
 		x.loadXML("<XCONFIG>" str "</XCONFIG>")
 		n := this.importNode(x.documentElement, true)
-		DOMNode := (n.childNodes.length > 1)
+		DOMNode := (n.childNodes.length>1)
 		        ? this.createDocumentFragment()
 		        : n.removeChild(n.firstChild)
 
@@ -276,10 +260,20 @@ class XConfig
 		else if (str ~= "s)^<!--.*?-->$")
 			return r["c", string]
 		;element
-		else if (str ~= "s)^<((?!(?:(?i)xml|[\d\W_]))[^\s\W]+)(?:[^>]+|)(?:/>$|>.*?</\1\s*>)$")
+		else if (str ~= "s)^<((?!(?:(?i)xml|[\d\W_]))[^\s\W]+)[^>]*?(?:/>$|>.*?</\1\s*>)$")
 			return r["e", string]
 
 		else throw Exception("No match", -1)
+	}
+
+	__MSXML() {
+		static MSXML := XConfig.__MSXML()
+
+		if !MSXML
+			MSXML := "MSXML2.DOMDocument"
+			      . ((A_OsVersion~="^WIN_(VISTA|7|8)$") ? ".6.0" : "")
+
+		return MSXML
 	}
 	/*
 	Private Method

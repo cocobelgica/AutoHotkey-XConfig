@@ -4,7 +4,7 @@ class XConfig
 	
 	__New(src, file:="") {
 		ObjInsert(this, "_", []) ;Proxy object
-		ObjInsert(this, "__doc", ComObjCreate(this.__MSXML()))
+		ObjInsert(this, "__dom", ComObjCreate(this.__MSXML()))
 		this.setProperty("SelectionLanguage", "XPath") ;for OS<VISTA|7|8
 		this.async := false
 
@@ -24,7 +24,7 @@ class XConfig
 		if (k ~= "i)^__(file)$")
 			return this._[k] := v
 
-		try if (n:=this.__doc.selectSingleNode(k)) {
+		try if (n:=this.__dom.selectSingleNode(k)) {
 			if ((nts:=n.nodeTypeString) = "element") {
 				if (t:=n.selectSingleNode("./text()")) {
 					prev := t.nodeValue
@@ -46,7 +46,7 @@ class XConfig
 			return prev
 		}
 
-		try return (this.__doc)[k] := v
+		try return (this.__dom)[k] := v
 	}
 
 	class __Get extends XConfig.__PROPERTIES__
@@ -54,7 +54,7 @@ class XConfig
 		/*
 		__(k, p*) {
 			
-			try if (n:=this.__doc.selectSingleNode(k)) {
+			try if (n:=this.__dom.selectSingleNode(k)) {
 				if ((nts:=n.nodeTypeString) = "element") {
 					return p.1
 					       ? n[p.1]
@@ -67,12 +67,12 @@ class XConfig
 			
 			}
 			
-			try return (this.__doc)[k]
+			try return (this.__dom)[k]
 		}
 		*/
 		__(k, p*) {
 
-			try if (n:=this.__doc.selectSingleNode(k)) {
+			try if (n:=this.__dom.selectSingleNode(k)) {
 				if p.MinIndex() {
 					for a, b in p
 						n := n[b]
@@ -86,7 +86,7 @@ class XConfig
 					return n.nodeValue
 			}
 
-			try return (this.__doc)[k]
+			try return (this.__dom)[k]
 		}
 
 		__file() {
@@ -121,7 +121,7 @@ class XConfig
 			))$"
 
 		if (!ObjHasKey(XConfig, m) && !(m~=BIF))
-			try return (this.__doc)[m](p*)
+			try return (this.__dom)[m](p*)
 	}
 
 	__Add(x, n, p:="") {
@@ -210,7 +210,7 @@ class XConfig
 			)"
 			xsl.loadXML(style)
 		}
-		this.transformNodeToObject(xsl, this.__doc)
+		this.transformNodeToObject(xsl, this.__dom)
 	}
 	
 	__XML2DOM(str) {
@@ -221,7 +221,7 @@ class XConfig
 			, x.async := false
 
 		x.loadXML("<XCONFIG>" str "</XCONFIG>")
-		n := this.importNode(x.documentElement, true)
+		n := this.ownerDocument.importNode(x.documentElement, true)
 		DOMNode := (n.childNodes.length>1)
 		        ? this.createDocumentFragment()
 		        : n.removeChild(n.firstChild)
@@ -236,7 +236,11 @@ class XConfig
 	*/
 	__(xpr, single:=true) {
 		;Bypass __Call in this case
-		return (this.__doc)[single ? "selectSingleNode" : "selectNodes"](xpr)
+		return (this.__dom)[single ? "selectSingleNode" : "selectNodes"](xpr)
+	}
+
+	__Sel(xpr) {
+		return new XConfig.__NODE__(this.__(xpr))
 	}
 	/*
 	Returns the node type of a node represented as XML string.
@@ -296,6 +300,88 @@ class XConfig
 		return m
 	}
 	*/
+	class __NODE__
+	{
+
+		__New(oContext, n:=".") {
+			ObjInsert(this, "_", [])
+			ObjInsert(this, "__dom", IsObject(n) ? n : oContext.selectSingleNode(n))
+		
+		}
+
+		__Set(k, v, p*) {
+
+			if (n:=this.__(k))
+				return n[(n.nodeType>1 ? "nodeValue" : "text")] := v
+			
+			else if (k ~= "i)^@\w+$")
+				return this.setAttribute(SubStr(k, 2), v)
+		}
+
+		class __Get extends XConfig.__PROPERTIES__
+		{
+
+			__(k, p*) {
+				static DOMNode_Property
+
+				if !DOMNode_Property
+					DOMNode_Property := "i)^(
+					(LTrim Join|
+					attributes
+					baseName
+					childNodes
+					dataType
+					definition
+					(first|last)Child
+					namespaceURI
+					(next|previous)Sibling
+					node(Name|Type(dValue|String)?|Value)
+					ownerDocument
+					parentNode
+					parsed
+					prefix
+					specified
+					tagName
+					text
+					xml
+					))$"
+
+				if (k ~= DOMNode_Property)
+					try return (this.__dom)[k]
+
+				else return XConfig.__Get.__.(this, k, p*)
+			}
+		}
+
+		__Call(m, p*) {
+			static DOMNode_Method
+
+			if !DOMNode_Method
+				DOMNode_Method := "i)^(
+				(LTrim Join|
+				(append|remove|replace)Child
+				cloneNode
+				get(Attribute(Node)?|ElementsByTagName)
+				hasChildNodes
+				insertBefore
+				normalize
+				removeAttribute(Node)?
+				select(Nodes|SingleNode)
+				setAttribute(Node)?
+				transformNode(ToObject)?
+				))$"
+			
+			if ObjHasKey(XConfig, m)
+				return (m<>"__Add")
+				       ? XConfig[m].(this, p*)
+				       : XConfig[m].(this, ".", p*)
+
+			else if (m ~= DOMNode_Method)
+				return XConfig.__Call.(this, m, p*)
+		}
+	
+	}
+
 	class __PROPERTIES__
 	{
 

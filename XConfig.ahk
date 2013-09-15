@@ -31,11 +31,10 @@ class XConfig
 					, t.nodeValue := v
 				
 				} else {
-					prev := "" , t := this.createTextNode(v)
-					if n.hasChildNodes()
-						n.insertBefore(t, n.firstChild)
-					
-					else n.appendChild(t)
+					prev := "" , t := this.__doc.createTextNode(v)
+					n.hasChildNodes()
+					? n.insertBefore(t, n.firstChild)
+					: n.appendChild(t)
 				}
 			
 			} else if (nts ~= "i)^(attribute|text|comment|cdatasection)$") {
@@ -95,6 +94,10 @@ class XConfig
 			       : ((url:=this.url)<>"" ? url : "")
 		}
 
+		__doc() {
+			return this.__dom
+		}
+
 		__root() {
 			return this.documentElement
 		}
@@ -127,8 +130,22 @@ class XConfig
 	__Add(x, n, p:="") {
 		x := this.selectSingleNode(x)
 		if IsObject(n) {
-			for a, b in n
-				x.setAttribute(a, b)
+			for k, v in n {
+				if RegExMatch(k, "Oi)^@(\w*)$", att)
+					if (att[1] <> "")
+						x.setAttribute(att[1], v)
+
+					else for a, b in v
+						x.setAttribute(a, b)
+
+				else if (k ~= "i)^t(ext(\(\))?)?$")
+					x.text := v
+
+				else if (k ~= "i)^cd(s|ata(section)?)$")
+					x.hasChildNodes()
+					? x.insertBefore(this.__doc.createCDATASection(v), x.firstChild)
+					: x.appendChild(this.__doc.createCDATASection(v))
+			}
 		
 		} else if (n ~= "s)^<.*>$") {
 			n := this.__XML2DOM(n)
@@ -138,25 +155,18 @@ class XConfig
 			return x[cmd](args*) ; Fix this in case DocumentFragment is added.
 
 		} else if (n ~= "i)^(?!(?:xml|[\d\W_]))[^\s\W]+$") { ; valid tagName
-			e := this.createElement(n)
+			e := this.__doc.createElement(n)
 			if IsObject(p) {
-				cmd := (r:=p.HasKey("ref")) ? "insertBefore" : "appendChild"
-				, args := r ? [e, x.selectSingleNode(p.ref)] : [e]
-				, e := x[cmd](args*)
-				
-				if p.HasKey("att")
-					for a, b in p.att
-						e.setAttribute(a, b)
-
-				if p.HasKey("text")
-					e.text := p.text
+				cmd := (r:=p.Remove("ref")) ? "insertBefore" : "appendChild"
+				, args := (r<>"") ? [e, x.selectSingleNode(r)] : [e]
+				, e := new XConfig.__NODE__(x[cmd](args*))
+				, e.__Add(p)
 			
 			} else {
 				e := x.appendChild(e)
 				if (p <> "")
 					e.text := p
 			}
-
 			return e
 		}
 		return true
@@ -221,9 +231,9 @@ class XConfig
 			, x.async := false
 
 		x.loadXML("<XCONFIG>" str "</XCONFIG>")
-		n := this.ownerDocument.importNode(x.documentElement, true)
+		n := this.__doc.importNode(x.documentElement, true)
 		DOMNode := (n.childNodes.length>1)
-		        ? this.createDocumentFragment()
+		        ? this.__doc.createDocumentFragment()
 		        : n.removeChild(n.firstChild)
 
 		while (n.hasChildNodes())
@@ -238,7 +248,10 @@ class XConfig
 		;Bypass __Call in this case
 		return (this.__dom)[single ? "selectSingleNode" : "selectNodes"](xpr)
 	}
-
+	/*
+	Works like selectSingleNode but returns an IXMLDOMNode object
+	wrapped/subclassed as an XConfig.__NODE__ object.
+	*/
 	__Sel(xpr) {
 		return new XConfig.__NODE__(this.__(xpr))
 	}
@@ -351,6 +364,10 @@ class XConfig
 
 				else return XConfig.__Get.__.(this, k, p*)
 			}
+
+			__doc() {
+				return this.ownerDocument
+			}
 		}
 
 		__Call(m, p*) {
@@ -377,7 +394,8 @@ class XConfig
 				       : XConfig[m].(this, ".", p*)
 
 			else if (m ~= DOMNode_Method)
-				return XConfig.__Call.(this, m, p*)
+				;return XConfig.__Call.(this, m, p*)
+				try return (this.__dom)[m](p*)
 		}
 	
 	}

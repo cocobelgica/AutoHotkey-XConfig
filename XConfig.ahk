@@ -199,30 +199,52 @@ class XConfig
 		         : ((f:=this.__file) ? f : A_WorkingDir "\XCONFIG-" A_TickCount))
 	}
 
-	__Transform() {
+	__Transform(DOM:=false) {
 		static xsl
 
 		if !xsl {
 			xsl := ComObjCreate(this.__MSXML())
 			style := "
-			(LTrim
-			<xsl:stylesheet version='1.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>
-			<xsl:output method='xml' indent='yes' encoding='UTF-8'/>
-			<xsl:template match='@*|node()'>
-			<xsl:copy>
-			<xsl:apply-templates select='@*|node()'/>
-			<xsl:for-each select='@*'>
-			<xsl:text></xsl:text>
-			</xsl:for-each>
-			</xsl:copy>
+			(LTrim Join
+			<?xml version='1.0' encoding='ISO-8859-15'?>
+			<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='1.0'>
+			<xsl:output method='xml'/>
+
+			<xsl:template match='@*'>
+			<xsl:copy/>
 			</xsl:template>
+
+			<xsl:template match='text()'>
+			<xsl:value-of select='normalize-space(.)' />
+			</xsl:template>
+
+			<xsl:template match='*'>
+			<xsl:param name='indent' select='""""'/>
+			<xsl:text>&#xa;</xsl:text>
+			<xsl:value-of select='$indent' />
+			<xsl:copy>
+			<!-- <xsl:apply-templates select='@*|*|text()'> -->
+			<xsl:apply-templates select='@*|node()'>
+			<xsl:with-param name='indent' select='concat($indent, ""  "")'/>
+			</xsl:apply-templates>
+			</xsl:copy>
+			<xsl:if test='count(../*)>0 and ../*[last()]=.'>
+			<xsl:text>&#xa;</xsl:text>
+			<xsl:value-of select='substring($indent,3)' />
+			</xsl:if>
+			</xsl:template>
+
 			</xsl:stylesheet>
 			)"
 			xsl.loadXML(style)
 		}
-		this.transformNodeToObject(xsl, this.__dom)
+		if DOM
+			this.transformNodeToObject(xsl, IsObject(DOM) ? DOM : this.__doc)
+		else return this.transfromNode(xsl)
 	}
-	
+	/*
+	Converts a node[element] represented as an XML string to DOM object
+	*/
 	__XML2DOM(str) {
 		static x
 

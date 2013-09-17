@@ -152,7 +152,7 @@ class XConfig
 			, cmd := (r:=(p<>"")) ? "insertBefore" : "appendChild"
 			, args := r ? [n, x.selectSingleNode(p)] : [n]
 			
-			return x[cmd](args*) ; Fix this in case DocumentFragment is added.
+			return x[cmd](args*) ;Fix this in case DocumentFragment is added.
 
 		} else if (n ~= "i)^(?!(?:xml|[\d\W_]))[^\s\W]+$") { ; valid tagName
 			e := this.__doc.createElement(n)
@@ -204,6 +204,8 @@ class XConfig
 
 		if !xsl {
 			xsl := ComObjCreate(this.__MSXML())
+			xsl.setProperty("SelectionLanguage", "XPath")
+			
 			style := "
 			(LTrim Join
 			<?xml version='1.0' encoding='ISO-8859-15'?>
@@ -236,11 +238,12 @@ class XConfig
 
 			</xsl:stylesheet>
 			)"
+			
 			xsl.loadXML(style)
 		}
 		if DOM
 			this.transformNodeToObject(xsl, IsObject(DOM) ? DOM : this.__doc)
-		else return this.transfromNode(xsl)
+		else return this.transformNode(xsl)
 	}
 	/*
 	Converts a node[element] represented as an XML string to DOM object
@@ -345,12 +348,19 @@ class XConfig
 		}
 
 		__Set(k, v, p*) {
+			static DOMNode_Property
+
+			if !DOMNode_Property
+				DOMNode_Property := this.__properties
 
 			if (n:=this.__(k))
 				return n[(n.nodeType>1 ? "nodeValue" : "text")] := v
 			
 			else if (k ~= "i)^@\w+$")
 				return this.setAttribute(SubStr(k, 2), v)
+
+			else if (k ~= DOMNode_Property)
+				try return (this.__dom)[k] := v
 		}
 
 		class __Get extends XConfig.__PROPERTIES__
@@ -360,7 +370,23 @@ class XConfig
 				static DOMNode_Property
 
 				if !DOMNode_Property
-					DOMNode_Property := "i)^(
+					DOMNode_Property := this.__properties
+
+				if (k ~= DOMNode_Property)
+					try return (this.__dom)[k]
+
+				else return XConfig.__Get.__.(this, k, p*)
+			}
+
+			__doc() {
+				return this.ownerDocument
+			}
+
+			__properties() {
+				static p
+
+				if !p
+					p := "i)^(
 					(LTrim Join|
 					attributes
 					baseName
@@ -381,14 +407,28 @@ class XConfig
 					xml
 					))$"
 
-				if (k ~= DOMNode_Property)
-					try return (this.__dom)[k]
-
-				else return XConfig.__Get.__.(this, k, p*)
+				return p
 			}
 
-			__doc() {
-				return this.ownerDocument
+			__methods() {
+				static m
+
+				if !m
+					m := "i)^(
+					(LTrim Join|
+					(append|remove|replace)Child
+					cloneNode
+					get(Attribute(Node)?|ElementsByTagName)
+					hasChildNodes
+					insertBefore
+					normalize
+					removeAttribute(Node)?
+					select(Nodes|SingleNode)
+					setAttribute(Node)?
+					transformNode(ToObject)?
+					))$"
+
+				return m
 			}
 		}
 
@@ -396,19 +436,7 @@ class XConfig
 			static DOMNode_Method
 
 			if !DOMNode_Method
-				DOMNode_Method := "i)^(
-				(LTrim Join|
-				(append|remove|replace)Child
-				cloneNode
-				get(Attribute(Node)?|ElementsByTagName)
-				hasChildNodes
-				insertBefore
-				normalize
-				removeAttribute(Node)?
-				select(Nodes|SingleNode)
-				setAttribute(Node)?
-				transformNode(ToObject)?
-				))$"
+				DOMNode_Method := this.__methods
 			
 			if ObjHasKey(XConfig, m)
 				return (m<>"__Add")

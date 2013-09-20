@@ -154,7 +154,7 @@ class XConfig
 			
 			return x[cmd](args*) ;Fix this in case DocumentFragment is added.
 
-		} else if (n ~= "i)^(?!(?:xml|[\d\W_]))[^\s\W]+$") { ; valid tagName
+		} else if (n ~= "i)^(?!(?:xml|[\d\W_]))[\w-:]+$") { ; valid tagName
 			e := this.__doc.createElement(n)
 			if IsObject(p) {
 				cmd := (r:=p.Remove("ref")) ? "insertBefore" : "appendChild"
@@ -302,7 +302,7 @@ class XConfig
 		else if (str ~= "s)^<!--.*?-->$")
 			return r["c", string]
 		;element
-		else if (str ~= "s)^<((?!(?:(?i)xml|[\d\W_]))[^\s\W]+)[^>]*?(?:/>$|>.*?</\1\s*>)$")
+		else if (str ~= "s)^<((?!(?:(?i)xml|[\d\W_]))[\w-:]+)[^>]*?(?:/>$|>.*?</[ \t]*\1[ \t]*>)$")
 			return r["e", string]
 
 		else throw Exception("No match", -1)
